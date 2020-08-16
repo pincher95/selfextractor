@@ -62,7 +62,7 @@ patch() {
 #	${PINE_PATH}/pamon.d/tcpserver.sh start #&>/dev/null
 
 monit_reset() {
-	echo -e "\n${cdy}[-]${coff} Restarting monit"
+	echo -e "${cdy}[-]${coff} Restarting monit"
 	while true; do
 		monit quit &>/dev/null
 		if $(kill -0 ${MONIT_PID} 2>/dev/null); then
