@@ -98,7 +98,7 @@ alert() {
 		if grep -Fxq "$CRON" ${PINE_PATH}/templates/crontab; then
         		echo -e "${cdy}[-]${coff} Alert already exist in crontab."
 		else
-        		echo -e "${cdy}[-]${coff} Alert added to crontab."
+        		echo -e "${cdg}[+]${coff} Alert added to crontab."
         		echo "$CRON" >> ${PINE_PATH}/templates/crontab
 		fi
 	else
@@ -111,12 +111,12 @@ alert() {
 		case "$input" in
 			"Y" | "y")
 				sed -i 's/^[[:blank:]]\#\/bin\/kill \-9 \$pamsg/\/bin\/kill \-9 \$pamsg/' ${PINE_PATH}/Alert_Paspawnerd.sh
-				echo -e "\n${cdy}[-]${coff} Done."
+				echo -e "\n${cdg}[+]${coff} Done."
 				break
 				;;
 			"N" | "n")
 				sed -i 's/\/bin\/kill \-9 \$pamsg/\#\/bin\/kill \-9 \$pamsg/' ${PINE_PATH}/Alert_Paspawnerd.sh
-				echo -e "\n${cdy}[-]${coff} Notification will be issued without restarting paspawnerd"
+				echo -e "\n${cdg}[+]${coff} Notification will be issued without restarting paspawnerd"
 				break
 				;;
 			*)
