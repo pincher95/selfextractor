@@ -163,7 +163,7 @@ while true; do
 			junk
 			;;
 		"6")
-			monit
+			monit_reset
 			;;
 		"a" | "A")
 			patch
