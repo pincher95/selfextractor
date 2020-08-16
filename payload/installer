@@ -1,0 +1,187 @@
+#!/bin/bash
+
+#Text Colors
+cdr="\e[31m"       # Color Dark Red
+cdg="\e[32m"       # Color Dark Green
+cdy="\e[33m"       # Color Dark Yellow
+
+# Turns off all formatting
+coff="\e[0m"       # Color Off
+
+if [ "$1" = "-d" ] || [ "$1" = "--debug" ]; then
+	set -x
+fi
+
+PINE_PATH="/usr/local/pineapp"
+MONIT_PID=$(pidof monit)
+PAMSGPROCESS_MD5="1bb6034634b2bc02c6fd8806de448a4c"
+PASPAWNERD_MD5="e22dcccc9ec91a9d829649b1d0099f79"
+FEB_RC1_FILE="/var/state/2020-Feb-02.VER-5.2.1-RC1"
+OLD_PAMSGPROCESS_MD5=$(md5sum ${PINE_PATH}/pamsgprocess | awk '{print $1}')
+OLD_PASPAWNERD_MD5=$(md5sum ${PINE_PATH}/paspawnerd | awk '{print $1}')
+CRON='*/5 * * * * /usr/local/pineapp/Alert_Paspawnerd.sh 1>/dev/null 2>/dev/null'
+
+patch() {
+	if [ ! -e ${FEB_RC1_FILE} ]; then
+        	echo -e "\n${cdr}[*]${coff} Seriously dude you are trying to apply pathces on wrong version....this will be logged and mail will be issued to Yoni"
+	elif [ "$OLD_PAMSGPROCESS_MD5" = "$PAMSGPROCESS_MD5" ] && [ "$OLD_PASPAWNERD_MD5" = "$PASPAWNERD_MD5" ]; then
+		echo -e "\n${cdy}[-]${coff} Unit already patched with latest pamsgprocess and paspawnerd"
+	else
+		echo -e "\n${cdy}[-]${coff} Patching PAMSGPROCESS and PASPAWNERD"
+		cp ${PINE_PATH}/pamsgprocess ${PINE_PATH}/pamsgprocess.back
+		cp ${PINE_PATH}/paspawnerd ${PINE_PATH}/paspawnerd.back
+		${PINE_PATH}/pamon.d/paspawnerd.sh stop
+		sleep 3
+		tar xvfj pamsgprocess-20200601_103750.tar.bz2 -C / &>/dev/null
+		tar xvfj paspawnerd-600-2020-02-06.tar.bz2 -C / &>/dev/null
+		${PINE_PATH}/pamon.d/paspawnerd.sh start
+		echo -e "${cdg}[+]${coff} PAMSGPROCESS and PASPAWNERD patched"
+
+		echo -e "${cdy}[-]${coff} Checking pamsgprocess and paspawnerd MD5"
+		NEW_PAMSGPROCESS_MD5=$(md5sum ${PINE_PATH}/pamsgprocess | awk '{print $1}')
+		NEW_PASPAWNERD_MD5=$(md5sum ${PINE_PATH}/paspawnerd | awk '{print $1}')
+
+		if [ "$NEW_PAMSGPROCESS_MD5" = "$PAMSGPROCESS_MD5" ] && [ "$NEW_PASPAWNERD_MD5" = "$PASPAWNERD_MD5" ]; then
+			echo -e "${cdg}[+]${coff} MD5 match"
+			rm -rf ${PINE_PATH}/{paspawnerd.back,pamsgprocess.back}
+			monit_reset
+		else
+			echo -e "${cdr}[*]${coff} Somthing got terribly wrong reverting all changes"
+			${PINE_PATH}/pamon.d/paspawnerd.sh stop
+			sleep 3
+			mv ${PINE_PATH}/pamsgprocess.back ${PINE_PATH}/pamsgprocess
+			mv ${PINE_PATH}/paspawnerd.back ${PINE_PATH}/paspawnerd
+			${PINE_PATH}/pamon.d/paspawnerd.sh start
+			monit_reset
+		fi
+	fi
+}
+#	echo "Restarting tcpserver"
+#	${PINE_PATH}/pamon.d/tcpserver.sh stop #&>/dev/null
+#	sleep 1
+#	${PINE_PATH}/pamon.d/tcpserver.sh start #&>/dev/null
+
+monit_reset() {
+	echo -e "\n${cdy}[-]${coff} Restarting monit"
+	while true; do
+		monit quit &>/dev/null
+		if $(kill -0 ${MONIT_PID} 2>/dev/null); then
+			continue
+		else
+			monit &>/dev/null
+			echo -e "${cdg}[+]${coff} Monit process restrarted"
+			sleep 2
+			monit summary
+			break
+		fi
+	done
+#	mymon.sh
+#	pstree -A
+#	echo "All Done. Thank you for flying Yuri's automation awesome script."
+}
+
+newmon() {
+	if [ ! -e ${PINE_PATH}/newmon.sh ]; then
+		mv newmon.sh ${PINE_PATH}
+		chmod +x ${PINE_PATH}/newmon.sh
+		echo -e "\n${cdg}[+]${coff} newmon.sh deployed"
+	else
+		echo -e "\n${cdy}[-]${coff} Skipping newmon.sh already deployed"
+	fi
+}
+
+alert() {
+	if [ ! -e ${PINE_PATH}/Alert_Paspawnerd.sh ]; then
+		tar xvf Alert_paspawnerd.tar -C / &>/dev/null
+		chmod +x ${PINE_PATH}/Alert_Paspawnerd.sh
+		echo -e "\n${cdg}[+]${coff} Alert paspawnerd deployed"
+		if grep -Fxq "$CRON" ${PINE_PATH}/templates/crontab; then
+        		echo -e "${cdy}[-]${coff} Alert already exist in crontab."
+		else
+        		echo -e "${cdy}[-]${coff} Alert added to crontab."
+        		echo "$CRON" >> ${PINE_PATH}/templates/crontab
+		fi
+	else
+		echo -e "\n${cdy}[-]${coff} Skipping Alert paspawnerd already deployed"
+
+	fi
+	while true; do
+		echo -e "${cdy}[-]${coff} Restart paspawnerd after 5 min [Y/n]:"
+		read -n 1 input
+		case "$input" in
+			"Y" | "y")
+				sed -i 's/^[[:blank:]]\#\/bin\/kill \-9 \$pamsg/\/bin\/kill \-9 \$pamsg/' ${PINE_PATH}/Alert_Paspawnerd.sh
+				echo -e "\n${cdy}[-]${coff} Done."
+				break
+				;;
+			"N" | "n")
+				sed -i 's/\/bin\/kill \-9 \$pamsg/\#\/bin\/kill \-9 \$pamsg/' ${PINE_PATH}/Alert_Paspawnerd.sh
+				echo -e "\n${cdy}[-]${coff} Notification will be issued without restarting paspawnerd"
+				break
+				;;
+			*)
+				echo -e "\n${cdr}[*]${coff} Invalid input"
+				;;
+		esac
+	done
+	PineAppConfig &>/dev/null
+}
+
+dtk() {
+	cat DTK_db_cleaner_new.php > ${PINE_PATH}/DTK_db_cleaner.php
+	echo -e "\n${cdg}[+]${coff} DTK db cleaner deployed"
+}
+
+junk() {
+	./junk_cleanup.sh
+}
+
+while true; do
+	echo "Press 1 to patch pamsgprocess and paspawnerd"
+	echo "Press 2 to add paspawnerd alert"
+	echo "Press 3 to deploy newmon.sh"
+	echo "Press 4 to deploy new DTK db cleaner"
+	echo "Press 5 to clear junk from /var/data/queue"
+	echo "Press a to deploy all"
+	echo "Press c to clear screen"
+	echo "Press x to exit the script"
+	read -n 1 -p "Input Selection:" mainselection
+	case "$mainselection" in
+		"1")
+			patch
+			;;
+		"2")
+			alert
+			;;
+		"3")
+			newmon
+			;;
+		"4")
+			dtk
+			;;
+		"5")
+			junk
+			;;
+		"6")
+			monit
+			;;
+		"a" | "A")
+			patch
+			alert
+			newmon
+			dtk
+			junk
+			echo -e "\n${cdg}[+]${coff} All patched and deployed."
+			;;
+		"c" | "C")
+			clear
+			;;
+		"x" | "X")
+			echo -e "\n${cdg}[+]${coff} All Done. Thank you for flying Yuri's automation awesome script."
+			break
+			;;
+		*)
+			echo -e "\n${cdr}[*]${coff}Invalid input."
+			;;
+	esac
+done
