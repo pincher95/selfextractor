@@ -68,7 +68,7 @@ monit_reset() {
 		if $(kill -0 ${MONIT_PID} 2>/dev/null); then
 			continue
 		else
-			monit &>/dev/null
+			(monit &>/dev/null &)
 			echo -e "${cdg}[+]${coff} Monit process restrarted"
 			sleep 2
 			monit summary
